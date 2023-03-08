@@ -175,8 +175,8 @@ const start = ({
     }
   });
 };
-const iframeOrigin = "https://anima-beyond-the-beyond.web.app";
-const iframeSrc = "https://anima-beyond-the-beyond.web.app";
+const iframeOrigin = "http://localhost:3000";
+const iframeSrc = "http://localhost:3000";
 start({
   iframeOrigin,
   iframeSrc
