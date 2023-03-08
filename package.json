@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "tsc && vite build",
-    "hook:pre-commit": "yarn build && git add . && lint-staged",
+    "hook:pre-commit": "lint-staged && yarn build && git add .",
     "prepare": "husky install"
   },
   "repository": {
