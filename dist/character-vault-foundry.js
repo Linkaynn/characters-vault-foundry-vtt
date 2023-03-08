@@ -8,7 +8,7 @@ var __publicField = (obj, key, value) => {
 const defaultDialogOptions = {
   width: 1024,
   height: 720,
-  classes: ["character-vault__iframe"]
+  classes: ["characters-vault__iframe"]
 };
 const openIframeDialog = ({
   src,
@@ -20,12 +20,12 @@ const openIframeDialog = ({
       title: "Characters Vault",
       content: `
   <style type='text/css'>
-    .character-vault__iframe > .window-content > .dialog-buttons { display: none }
+    .characters-vault__iframe > .window-content > .dialog-buttons { display: none }
   </style>
   <div style="height: 100%;">
     <div style="position:relative;padding-top:66.5%;">
       <iframe
-        id="character-vault-iframe"
+        id="characters-vault-iframe"
         src="${src}"
         frameBorder="0"
         allowFullScreen
