@@ -27,6 +27,19 @@
     "@types/node": "^18.14.0",
     "@types/jquery": "^3.5.16",
     "prettier": "^2.8.4",
-    "husky": "^8.0.3"
+    "husky": "^8.0.3",
+    "lint-staged": "^11.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.48.2",
+    "@typescript-eslint/parser": "^5.48.2",
+    "eslint": "^7.32.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-unused-imports": "^2.0.0"
+  },
+  "lint-staged": {
+    "src/**/*.ts": "eslint --fix --cache --max-warnings=0",
+    "src/**/*.{ts,tsx}": [
+      "bash -c \"tsc --noEmit --pretty\""
+    ]
   }
 }

@@ -15,11 +15,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "skipLibCheck": true,
-    "types": ["types"]
+    "skipLibCheck": true
   },
-  "include": [
-    "src",
-    "types"
-  ]
+  "include": ["src", "types"]
 }

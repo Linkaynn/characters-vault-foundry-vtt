@@ -8,7 +8,7 @@ const iframeSrc = 'http://localhost:3000';
 let dialogOpened = false;
 
 let connectionOpen = false;
-let connectionTimeout: number | undefined = undefined;
+let connectionTimeout: NodeJS.Timeout | undefined = undefined;
 
 const getIframe = () => {
   const iframe = document.getElementById(

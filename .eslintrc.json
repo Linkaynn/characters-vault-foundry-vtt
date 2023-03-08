@@ -1,29 +1,16 @@
 {
   "env": {
-    "browser": true,
-    "es2021": true,
     "node": true
   },
-  "extends": [
-    "eslint:recommended",
-    "plugin:react/recommended",
-    "plugin:@typescript-eslint/recommended"
-  ],
+  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   "parser": "@typescript-eslint/parser",
-  "parserOptions": {
-    "ecmaFeatures": {
-      "jsx": true
-    },
-    "ecmaVersion": 12,
-    "sourceType": "module"
-  },
-  "plugins": ["react", "@typescript-eslint", "unused-imports"],
+  "plugins": ["@typescript-eslint", "unused-imports"],
   "rules": {
     "linebreak-style": ["error", "unix"],
     "quotes": ["warn", "single"],
     "semi": ["warn", "always"],
     "@typescript-eslint/no-explicit-any": "off",
-    "no-unused-vars": "off", // or "@typescript-eslint/no-unused-vars": "off",
+    "no-unused-vars": "off",
     "unused-imports/no-unused-imports": "error",
     "unused-imports/no-unused-vars": [
       "warn",
@@ -34,22 +21,6 @@
         "argsIgnorePattern": "^_"
       }
     ],
-    "no-debugger": "warn",
-
-    // It's safe on React > 17
-    "react/react-in-jsx-scope": "off"
-  },
-  "settings": {
-    "react": {
-      "version": "detect"
-    }
-  },
-  "overrides": [
-    {
-      "files": ["*.js"],
-      "env": {
-        "node": true
-      }
-    }
-  ]
+    "no-debugger": "warn"
+  }
 }
