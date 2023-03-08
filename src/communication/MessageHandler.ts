@@ -1,4 +1,4 @@
-export class CharactersVaultMessageHandler {
+export class MessageHandler {
   constructor(
     private readonly sendMessage: (message: {
       type: string;

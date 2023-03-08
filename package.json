@@ -4,8 +4,10 @@
   "description": "Integration of Characters Vault for Foundry VTT",
   "main": "index.js",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "tsc && vite build",
+    "dev": "NODE_ENV=development vite build --watch",
+    "build:dev": "NODE_ENV=development vite build",
+    "build:prod": "NODE_ENV=production vite build",
+    "build": "tsc && yarn build:prod && yarn build:dev",
     "hook:pre-commit": "lint-staged && yarn build && git add .",
     "prepare": "husky install"
   },

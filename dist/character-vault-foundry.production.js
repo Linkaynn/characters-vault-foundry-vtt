@@ -5,48 +5,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-const defaultDialogOptions = {
-  width: 1024,
-  height: 720,
-  classes: ["characters-vault__iframe"]
-};
-const openIframeDialog = ({
-  src,
-  onOpen,
-  onClose
-}) => {
-  return new Dialog(
-    {
-      title: "Characters Vault",
-      content: `
-  <style type='text/css'>
-    .characters-vault__iframe > .window-content > .dialog-buttons { display: none }
-  </style>
-  <div style="height: 100%;">
-    <div style="position:relative;padding-top:66.5%;">
-      <iframe
-        id="characters-vault-iframe"
-        src="${src}"
-        frameBorder="0"
-        allowFullScreen
-        style="position:absolute;top:0;left:0;width:100%;height:100%;"
-      ></iframe>
-    </div>
-  </div>
-`,
-      buttons: {},
-      default: "accept",
-      render: () => {
-        onOpen();
-      },
-      close: () => {
-        onClose();
-      }
-    },
-    defaultDialogOptions
-  ).render(true);
-};
-class CharactersVaultMessageHandler {
+class MessageHandler {
   constructor(sendMessage) {
     this.sendMessage = sendMessage;
   }
@@ -96,7 +55,7 @@ class CharactersVaultMessageHandler {
     }
   }
 }
-class CharactersVaultIframeHandler {
+class IframeHandler {
   constructor(iframeId, iframeOrigin2) {
     __publicField(this, "connectionOpen", false);
     __publicField(this, "connectionTimeout");
@@ -142,7 +101,7 @@ class CharactersVaultIframeHandler {
       throw new Error(`Element with id ${this.iframeId} not found`);
     }
     this.iframe = element.contentWindow;
-    this.messageHandler = new CharactersVaultMessageHandler(this.sendMessage);
+    this.messageHandler = new MessageHandler(this.sendMessage);
   }
   start() {
     window.addEventListener("message", this.onMessage);
@@ -159,19 +118,66 @@ class CharactersVaultIframeHandler {
     }
   }
 }
+const defaultDialogOptions = {
+  width: 1024,
+  height: 720,
+  classes: ["characters-vault__iframe"]
+};
+const openIframeDialog = ({
+  src,
+  onOpen,
+  onClose
+}) => {
+  return new Dialog(
+    {
+      title: "Characters Vault",
+      content: `
+  <style type='text/css'>
+    .characters-vault__iframe > .window-content > .dialog-buttons { display: none }
+  </style>
+  <div style="height: 100%;">
+    <div style="position:relative;padding-top:66.5%;">
+      <iframe
+        id="characters-vault-iframe"
+        src="${src}"
+        frameBorder="0"
+        allowFullScreen
+        style="position:absolute;top:0;left:0;width:100%;height:100%;"
+      ></iframe>
+    </div>
+  </div>
+`,
+      buttons: {},
+      default: "accept",
+      render: () => {
+        onOpen();
+      },
+      close: () => {
+        onClose();
+      }
+    },
+    defaultDialogOptions
+  ).render(true);
+};
+const start = ({
+  iframeOrigin: iframeOrigin2,
+  iframeSrc: iframeSrc2
+}) => {
+  let handler;
+  openIframeDialog({
+    src: iframeSrc2,
+    onOpen: () => {
+      handler = new IframeHandler("characters-vault-iframe", iframeOrigin2);
+      handler.start();
+    },
+    onClose: () => {
+      handler == null ? void 0 : handler.stop();
+    }
+  });
+};
 const iframeOrigin = "http://localhost:3000";
 const iframeSrc = "http://localhost:3000";
-let handler;
-openIframeDialog({
-  src: iframeSrc,
-  onOpen: () => {
-    handler = new CharactersVaultIframeHandler(
-      "characters-vault-iframe",
-      iframeOrigin
-    );
-    handler.start();
-  },
-  onClose: () => {
-    handler == null ? void 0 : handler.stop();
-  }
+start({
+  iframeOrigin,
+  iframeSrc
 });

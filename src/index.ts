@@ -1,24 +1,24 @@
+import { IframeHandler } from './communication/IframeHandler';
 import { openIframeDialog } from './utils/openIframeDialog';
-import { CharactersVaultIframeHandler } from './CharactersVaultIframeHandler';
 
-const iframeOrigin = 'http://localhost:3000';
-const iframeSrc = 'http://localhost:3000';
+export const start = ({
+  iframeOrigin,
+  iframeSrc,
+}: {
+  iframeOrigin: string;
+  iframeSrc: string;
+}) => {
+  let handler: IframeHandler;
 
-let handler: CharactersVaultIframeHandler;
+  openIframeDialog({
+    src: iframeSrc,
+    onOpen: () => {
+      handler = new IframeHandler('characters-vault-iframe', iframeOrigin);
 
-openIframeDialog({
-  src: iframeSrc,
-  onOpen: () => {
-    handler = new CharactersVaultIframeHandler(
-      'characters-vault-iframe',
-      iframeOrigin,
-    );
-
-    handler.start();
-  },
-  onClose: () => {
-    handler?.stop();
-  },
-});
-
-export {};
+      handler.start();
+    },
+    onClose: () => {
+      handler?.stop();
+    },
+  });
+};

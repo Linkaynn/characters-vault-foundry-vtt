@@ -1,13 +1,13 @@
-import { CharactersVaultMessageHandler } from './CharactersVaultMessageHandler';
+import { MessageHandler } from './MessageHandler';
 
-export class CharactersVaultIframeHandler {
+export class IframeHandler {
   private connectionOpen = false;
 
   private connectionTimeout: NodeJS.Timeout | undefined = undefined;
 
   private iframe: WindowProxy;
 
-  private messageHandler: CharactersVaultMessageHandler;
+  private messageHandler: MessageHandler;
 
   constructor(
     private readonly iframeId: string,
@@ -21,7 +21,7 @@ export class CharactersVaultIframeHandler {
 
     this.iframe = element.contentWindow;
 
-    this.messageHandler = new CharactersVaultMessageHandler(this.sendMessage);
+    this.messageHandler = new MessageHandler(this.sendMessage);
   }
 
   sendMessage = (message: { type: string; data?: any }) => {
