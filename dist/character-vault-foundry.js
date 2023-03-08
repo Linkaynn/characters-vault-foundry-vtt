@@ -1,4 +1,10 @@
 "use strict";
+var __defProp = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => {
+  __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+  return value;
+};
 const defaultDialogOptions = {
   width: 1024,
   height: 720,
@@ -40,44 +46,11 @@ const openIframeDialog = ({
     defaultDialogOptions
   ).render(true);
 };
-const iframeOrigin = "http://localhost:3000";
-const iframeSrc = "http://localhost:3000";
-let dialogOpened = false;
-let connectionOpen = false;
-let connectionTimeout = void 0;
-const getIframe = () => {
-  const iframe = document.getElementById(
-    "character-vault-iframe"
-  );
-  if (!iframe || !dialogOpened || !iframe.contentWindow) {
-    throw new Error("Characters Vault unavailable");
+class CharactersVaultMessageHandler {
+  constructor(sendMessage) {
+    this.sendMessage = sendMessage;
   }
-  return iframe.contentWindow;
-};
-const sendPing = () => {
-  getIframe().postMessage(JSON.stringify({ type: "ping" }), iframeOrigin);
-  if (connectionTimeout) {
-    clearTimeout(connectionTimeout);
-  }
-  connectionTimeout = setTimeout(() => {
-    connectionOpen = false;
-    sendPing();
-  }, 2e3);
-};
-const onMessage = (event) => {
-  if (event.origin !== iframeOrigin) {
-    return;
-  }
-  try {
-    const { type, data } = JSON.parse(event.data);
-    if (type === "pong") {
-      connectionOpen = true;
-      if (connectionOpen && dialogOpened) {
-        setTimeout(() => {
-          sendPing();
-        }, 1e3);
-      }
-    }
+  handle(type, data) {
     const actors = [...game.actors];
     if (type === "get-actors") {
       const actorsData = actors.map((a) => ({
@@ -86,17 +59,14 @@ const onMessage = (event) => {
         vtt: "foundry",
         data: a.data.data
       }));
-      getIframe().postMessage(
-        JSON.stringify({
-          type: "actors",
-          data: {
-            vtt: "foundry",
-            system: "AnimaBeyondFantasy",
-            actors: actorsData
-          }
-        }),
-        iframeOrigin
-      );
+      this.sendMessage({
+        type: "actors",
+        data: {
+          vtt: "foundry",
+          system: "AnimaBeyondFantasy",
+          actors: actorsData
+        }
+      });
     }
     if (type === "update-actor") {
       const newActor = data.actor;
@@ -124,23 +94,84 @@ const onMessage = (event) => {
         }
       }
     }
-  } catch (e) {
-    console.error("Message error", e);
   }
-};
+}
+class CharactersVaultIframeHandler {
+  constructor(iframeId, iframeOrigin2) {
+    __publicField(this, "connectionOpen", false);
+    __publicField(this, "connectionTimeout");
+    __publicField(this, "iframe");
+    __publicField(this, "messageHandler");
+    __publicField(this, "sendMessage", (message) => {
+      this.iframe.postMessage(JSON.stringify(message), this.iframeOrigin);
+    });
+    __publicField(this, "sendPing", () => {
+      this.sendMessage({ type: "ping" });
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+      }
+      this.connectionTimeout = setTimeout(() => {
+        this.connectionOpen = false;
+        this.sendPing();
+      }, 2e3);
+    });
+    __publicField(this, "onMessage", (event) => {
+      if (event.origin !== this.iframeOrigin) {
+        return;
+      }
+      try {
+        const { type, data } = JSON.parse(event.data);
+        if (type === "pong") {
+          this.connectionOpen = true;
+          if (this.connectionOpen) {
+            setTimeout(() => {
+              this.sendPing();
+            }, 1e3);
+          }
+        } else {
+          this.messageHandler.handle(type, data);
+        }
+      } catch (e) {
+        console.error("Message error", e);
+      }
+    });
+    this.iframeId = iframeId;
+    this.iframeOrigin = iframeOrigin2;
+    const element = document.getElementById(this.iframeId);
+    if (!element || !element.contentWindow) {
+      throw new Error(`Element with id ${this.iframeId} not found`);
+    }
+    this.iframe = element.contentWindow;
+    this.messageHandler = new CharactersVaultMessageHandler(this.sendMessage);
+  }
+  start() {
+    window.addEventListener("message", this.onMessage);
+    this.sendPing();
+  }
+  stop() {
+    window.removeEventListener("message", this.onMessage);
+    this.dispose();
+  }
+  dispose() {
+    this.connectionOpen = false;
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+    }
+  }
+}
+const iframeOrigin = "http://localhost:3000";
+const iframeSrc = "http://localhost:3000";
+let handler;
 openIframeDialog({
   src: iframeSrc,
   onOpen: () => {
-    dialogOpened = true;
-    window.addEventListener("message", onMessage);
-    sendPing();
+    handler = new CharactersVaultIframeHandler(
+      "characters-vault-iframe",
+      iframeOrigin
+    );
+    handler.start();
   },
   onClose: () => {
-    dialogOpened = false;
-    connectionOpen = false;
-    if (connectionTimeout) {
-      clearTimeout(connectionTimeout);
-    }
-    window.removeEventListener("message", onMessage);
+    handler == null ? void 0 : handler.stop();
   }
 });
