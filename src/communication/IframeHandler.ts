@@ -41,7 +41,7 @@ export class IframeHandler {
     }, 2000);
   };
 
-  onMessage = (event: MessageEvent) => {
+  onMessage = async (event: MessageEvent) => {
     if (event.origin !== this.iframeOrigin) {
       return;
     }
@@ -58,7 +58,7 @@ export class IframeHandler {
           }, 1000);
         }
       } else {
-        this.messageHandler.handle(type, data);
+        await this.messageHandler.handle(type, data);
       }
     } catch (e) {
       console.error('Message error', e);

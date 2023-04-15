@@ -6,8 +6,8 @@ export class MessageHandler {
     }) => void,
   ) {}
 
-  handle(type: string, data: any) {
-    const actors = [...game.actors];
+  async handle(type: string, data: any) {
+    const actors = [...game.actors!];
 
     if (type === 'get-actors') {
       const actorsData = actors.map((a) => ({
@@ -27,6 +27,28 @@ export class MessageHandler {
       });
     }
 
+    if (type === 'new-actor') {
+      const actor = await Actor.create({
+        name: 'Dummy actor (Characters Vault)',
+        type: 'character',
+      });
+
+      if (!actor) {
+        console.error('Error creating actor');
+        return;
+      }
+
+      this.sendMessage({
+        type: 'new-actor',
+        data: {
+          id: actor.id,
+          name: actor.name,
+          vtt: 'foundry',
+          data: actor.data.data,
+        },
+      });
+    }
+
     if (type === 'update-actor') {
       const newActor = data.actor;
       const actions = data.actions;
@@ -34,28 +56,32 @@ export class MessageHandler {
       const actor = actors.find((a) => a.id === newActor.id);
 
       if (actor) {
-        actor.update({
-          name: newActor.name,
+        this.updateActor(actor, newActor, actions);
+      }
+    }
+  }
 
-          data: newActor.data,
-        });
+  private updateActor(actor: any, newActor: any, actions: any[]) {
+    actor.update({
+      name: newActor.name,
 
-        for (const action of actions) {
-          if (action.type === 'delete' && action.ids.length > 0) {
-            actor.deleteEmbeddedDocuments('Item', action.ids);
-          }
+      data: newActor.data,
+    });
 
-          if (action.type === 'create' && action.data.length > 0) {
-            actor.createEmbeddedDocuments(
-              'Item',
-              action.data.map((d: any) => ({
-                type: d.type,
-                name: d.name,
-                data: d.data,
-              })),
-            );
-          }
-        }
+    for (const action of actions) {
+      if (action.type === 'delete' && action.ids.length > 0) {
+        actor.deleteEmbeddedDocuments('Item', action.ids);
+      }
+
+      if (action.type === 'create' && action.data.length > 0) {
+        actor.createEmbeddedDocuments(
+          'Item',
+          action.data.map((d: any) => ({
+            type: d.type,
+            name: d.name,
+            data: d.data,
+          })),
+        );
       }
     }
   }
