@@ -5,12 +5,20 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
+var _a;
+const getActorsWithOwnerPermission = () => {
+  if (game.actors) {
+    return game.actors.filter((a) => a.permission === 3);
+  }
+  return [];
+};
+const IAmAGM = ((_a = game.user) == null ? void 0 : _a.isGM) === true;
 class MessageHandler {
   constructor(sendMessage) {
     this.sendMessage = sendMessage;
   }
   async handle(type, data) {
-    const actors = [...game.actors];
+    const actors = [...getActorsWithOwnerPermission()];
     if (type === "get-actors") {
       const actorsData = actors.map((a) => ({
         id: a.id,
@@ -27,24 +35,26 @@ class MessageHandler {
         }
       });
     }
-    if (type === "new-actor") {
-      const actor = await Actor.create({
-        name: "Dummy actor (Characters Vault)",
-        type: "character"
-      });
-      if (!actor) {
-        console.error("Error creating actor");
-        return;
-      }
-      this.sendMessage({
-        type: "new-actor",
-        data: {
-          id: actor.id,
-          name: actor.name,
-          vtt: "foundry",
-          data: actor.data.data
+    if (IAmAGM) {
+      if (type === "new-actor") {
+        const actor = await Actor.create({
+          name: "Dummy actor (Characters Vault)",
+          type: "character"
+        });
+        if (!actor) {
+          console.error("Error creating actor");
+          return;
         }
-      });
+        this.sendMessage({
+          type: "new-actor",
+          data: {
+            id: actor.id,
+            name: actor.name,
+            vtt: "foundry",
+            data: actor.data.data
+          }
+        });
+      }
     }
     if (type === "update-actor") {
       const newActor = data.actor;
