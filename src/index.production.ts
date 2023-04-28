@@ -1,7 +1,7 @@
 import { start } from './index';
 
-const iframeOrigin = 'https://anima-beyond-the-beyond.web.app';
-const iframeSrc = 'https://anima-beyond-the-beyond.web.app';
+const iframeOrigin = 'https://app.charactersvault.com';
+const iframeSrc = 'https://app.charactersvault.com';
 
 start({
   iframeOrigin,
