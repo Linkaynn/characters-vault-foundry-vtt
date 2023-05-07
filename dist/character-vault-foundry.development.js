@@ -151,8 +151,8 @@ class IframeHandler {
   }
 }
 const defaultDialogOptions = {
-  width: 1024,
-  height: 720,
+  width: 1250,
+  height: 850,
   classes: ["characters-vault__iframe"]
 };
 const openIframeDialog = ({
