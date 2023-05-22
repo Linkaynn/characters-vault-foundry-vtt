@@ -1,13 +1,19 @@
-import { MessageHandler } from './MessageHandler';
+import { Connection, connectToChild } from 'penpal';
+import { getActorsWithOwnerPermission } from '../utils/getActorsWithOwnerPermission';
+
+export type FoundryVTTActorData = {
+  id: string;
+  name: string;
+
+  vtt: 'foundry';
+
+  data: any;
+
+  flags: Record<string, any>;
+};
 
 export class IframeHandler {
-  private connectionOpen = false;
-
-  private connectionTimeout: NodeJS.Timeout | undefined = undefined;
-
-  private iframe: WindowProxy;
-
-  private messageHandler: MessageHandler;
+  private connection: Connection;
 
   constructor(
     private readonly iframeId: string,
@@ -19,69 +25,107 @@ export class IframeHandler {
       throw new Error(`Element with id ${this.iframeId} not found`);
     }
 
-    this.iframe = element.contentWindow;
+    this.connection = connectToChild({
+      iframe: element,
 
-    this.messageHandler = new MessageHandler(this.sendMessage);
+      childOrigin: this.iframeOrigin,
+
+      methods: {
+        createActor: this.createActor,
+        updateActor: this.updateActor,
+        getActors: this.getActors,
+      },
+    });
   }
 
-  sendMessage = (message: { type: string; data?: any }) => {
-    this.iframe.postMessage(JSON.stringify(message), this.iframeOrigin);
+  private getActors = async (): Promise<FoundryVTTActorData[]> => {
+    const actors = [...getActorsWithOwnerPermission()];
+
+    return actors.map(this.buildFoundryActorData);
   };
 
-  sendPing = () => {
-    this.sendMessage({ type: 'ping' });
+  private createActor = async () => {
+    const newActor = await Actor.create({
+      name: 'Dummy actor (Characters Vault)',
+      type: 'character',
+    });
 
-    if (this.connectionTimeout) {
-      clearTimeout(this.connectionTimeout);
+    if (!newActor) {
+      throw new Error('Error creating actor');
     }
 
-    this.connectionTimeout = setTimeout(() => {
-      this.connectionOpen = false;
-      this.sendPing();
-    }, 2000);
+    return this.buildFoundryActorData(newActor);
   };
 
-  onMessage = async (event: MessageEvent) => {
-    if (event.origin !== this.iframeOrigin) {
-      return;
-    }
+  private updateActor = async ({
+    actor,
+    actions,
+    isNew,
+  }: {
+    isNew: boolean;
+    tokenAsBase64?: string;
+    actor: FoundryVTTActorData;
+    actions: any[];
+  }) => {
+    const actors = [...getActorsWithOwnerPermission()];
 
-    try {
-      const { type, data } = JSON.parse(event.data);
+    const actorToBeUpdated = actors.find((a) => a.id === actor.id);
 
-      if (type === 'pong') {
-        this.connectionOpen = true;
+    if (actorToBeUpdated) {
+      await actorToBeUpdated.update({
+        name: actor.name,
 
-        if (this.connectionOpen) {
-          setTimeout(() => {
-            this.sendPing();
-          }, 1000);
+        data: actor.data,
+
+        token: {
+          name: isNew ? actor.name : actorToBeUpdated.token?.name,
+        },
+
+        flags: {
+          ...actorToBeUpdated.data.flags,
+          ...actor.flags,
+        },
+      });
+
+      for (const action of actions) {
+        if (action.type === 'delete' && action.ids.length > 0) {
+          await actorToBeUpdated.deleteEmbeddedDocuments('Item', action.ids);
         }
-      } else {
-        await this.messageHandler.handle(type, data);
+
+        if (action.type === 'create' && action.data.length > 0) {
+          await actorToBeUpdated.createEmbeddedDocuments(
+            'Item',
+            action.data.map((d: any) => ({
+              type: d.type,
+              name: d.name,
+              data: d.data,
+              flags: d.flags,
+            })),
+          );
+        }
       }
-    } catch (e) {
-      console.error('Message error', e);
     }
   };
 
-  start() {
-    window.addEventListener('message', this.onMessage);
-
-    this.sendPing();
+  async start() {
+    await this.connection.promise;
   }
 
   stop() {
-    window.removeEventListener('message', this.onMessage);
-
     this.dispose();
   }
 
-  private dispose() {
-    this.connectionOpen = false;
+  private buildFoundryActorData = (
+    actor: StoredDocument<Actor>,
+  ): FoundryVTTActorData => ({
+    id: actor.id,
+    name: actor.name ?? 'Unknown',
+    vtt: 'foundry',
+    data: actor.data.data,
+    flags: actor.data.flags,
+  });
 
-    if (this.connectionTimeout) {
-      clearTimeout(this.connectionTimeout);
-    }
+  private dispose() {
+    this.connection?.destroy();
   }
 }
