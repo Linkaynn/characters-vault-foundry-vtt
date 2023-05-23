@@ -395,6 +395,50 @@ const getActorsWithOwnerPermission = () => {
   }
   return [];
 };
+const getUser = () => {
+  return game.user;
+};
+const dataURLtoFile = (dataUrl, filename) => {
+  var _a;
+  const arr = dataUrl.split(",");
+  const mime = (_a = arr[0].match(/:(.*?);/)) == null ? void 0 : _a[1];
+  const bstr = atob(arr[arr.length - 1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+};
+const createFolder = async (folderPath) => {
+  const folders = folderPath.split("/");
+  let currentFolder = "";
+  for (const folder of folders) {
+    currentFolder += `${folder}/`;
+    try {
+      await FilePicker.createDirectory("data", currentFolder);
+    } catch (e) {
+      console.log(e);
+    }
+  }
+};
+const uploadCharacterToken = async (tokenAsBase64, actor) => {
+  const tokenFolderPath = `characters-vault/${getUser().id}`;
+  const file = dataURLtoFile(tokenAsBase64, `${actor.id}.png`);
+  await createFolder(tokenFolderPath);
+  const uploadResult = await FilePicker.upload("data", tokenFolderPath, file);
+  if (uploadResult) {
+    const r = uploadResult;
+    return { path: r.path };
+  } else {
+    console.log(uploadResult);
+    throw new Error("Error uploading token");
+  }
+};
+const canUpload = () => {
+  var _a;
+  return !!((_a = game.user) == null ? void 0 : _a.can("FILES_UPLOAD"));
+};
 class IframeHandler {
   constructor(iframeId, iframeOrigin2) {
     __publicField(this, "connection");
@@ -414,18 +458,31 @@ class IframeHandler {
     });
     __publicField(this, "updateActor", async ({
       actor,
+      tokenAsBase64,
       actions,
       isNew
     }) => {
-      var _a;
+      var _a, _b, _c;
+      let tokenPath;
+      if (tokenAsBase64) {
+        if (canUpload()) {
+          tokenPath = (_a = await uploadCharacterToken(tokenAsBase64, actor)) == null ? void 0 : _a.path;
+        } else {
+          (_b = ui.notifications) == null ? void 0 : _b.warn(
+            "No tienes permisos para subir los tokens de los personajes. Pídele a tu GM que lo haga por ti."
+          );
+        }
+      }
       const actors = [...getActorsWithOwnerPermission()];
       const actorToBeUpdated = actors.find((a) => a.id === actor.id);
       if (actorToBeUpdated) {
         await actorToBeUpdated.update({
+          img: tokenPath,
           name: actor.name,
           data: actor.data,
           token: {
-            name: isNew ? actor.name : (_a = actorToBeUpdated.token) == null ? void 0 : _a.name
+            img: tokenPath,
+            name: isNew ? actor.name : (_c = actorToBeUpdated.token) == null ? void 0 : _c.name
           },
           flags: {
             ...actorToBeUpdated.data.flags,

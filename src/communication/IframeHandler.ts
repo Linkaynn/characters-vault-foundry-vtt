@@ -1,5 +1,7 @@
 import { Connection, connectToChild } from 'penpal';
 import { getActorsWithOwnerPermission } from '../utils/getActorsWithOwnerPermission';
+import { uploadCharacterToken } from '../token/uploadCharacterToken';
+import { canUpload } from '../utils/canUpload';
 
 export type FoundryVTTActorData = {
   id: string;
@@ -59,6 +61,7 @@ export class IframeHandler {
 
   private updateActor = async ({
     actor,
+    tokenAsBase64,
     actions,
     isNew,
   }: {
@@ -67,17 +70,32 @@ export class IframeHandler {
     actor: FoundryVTTActorData;
     actions: any[];
   }) => {
+    let tokenPath: string | undefined;
+
+    if (tokenAsBase64) {
+      if (canUpload()) {
+        tokenPath = (await uploadCharacterToken(tokenAsBase64, actor))?.path;
+      } else {
+        ui.notifications?.warn(
+          'No tienes permisos para subir los tokens de los personajes. Pídele a tu GM que lo haga por ti.',
+        );
+      }
+    }
+
     const actors = [...getActorsWithOwnerPermission()];
 
     const actorToBeUpdated = actors.find((a) => a.id === actor.id);
 
     if (actorToBeUpdated) {
       await actorToBeUpdated.update({
+        img: tokenPath,
+
         name: actor.name,
 
         data: actor.data,
 
         token: {
+          img: tokenPath,
           name: isNew ? actor.name : actorToBeUpdated.token?.name,
         },
 

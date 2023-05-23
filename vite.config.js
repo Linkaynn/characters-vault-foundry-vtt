@@ -1,5 +1,6 @@
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
+import checker from 'vite-plugin-checker';
 
 const config = {
   development: {
@@ -22,6 +23,12 @@ if (currentConfig === undefined) {
 
 // https://vitejs.dev/guide/build.html#library-mode
 export default defineConfig({
+  plugins: [
+    checker({
+      typescript: true,
+    }),
+  ],
+
   build: {
     minify: false,
     emptyOutDir: false,
