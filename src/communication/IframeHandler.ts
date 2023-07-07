@@ -1,21 +1,13 @@
 import { Connection, connectToChild } from 'penpal';
-import { getActorsWithOwnerPermission } from '../utils/getActorsWithOwnerPermission';
-import { uploadCharacterToken } from '../token/uploadCharacterToken';
-import { canUpload } from '../utils/canUpload';
-
-export type FoundryVTTActorData = {
-  id: string;
-  name: string;
-
-  vtt: 'foundry';
-
-  data: any;
-
-  flags: Record<string, any>;
-};
+import { buildFoundryVTTApiDependingOnVersion } from '../foundry/implementations/foundry/utils/buildFoundryVTTApiDependingOnVersion';
+import { FoundryVTTToCVActor } from '../foundry/implementations/foundry/FoundryVTTToCVActor';
+import { FoundryV10UpVTTApi } from '../foundry/implementations/foundry/FoundryV10UpVTTApi';
+import { FoundryV9VTTApi } from '../foundry/implementations/foundry/FoundryV9VTTApi';
 
 export class IframeHandler {
   private connection: Connection;
+
+  private foundryVttApi: FoundryV10UpVTTApi | FoundryV9VTTApi;
 
   constructor(
     private readonly iframeId: string,
@@ -38,25 +30,24 @@ export class IframeHandler {
         getActors: this.getActors,
       },
     });
+
+    this.foundryVttApi = buildFoundryVTTApiDependingOnVersion();
   }
 
-  private getActors = async (): Promise<FoundryVTTActorData[]> => {
-    const actors = [...getActorsWithOwnerPermission()];
+  async start() {
+    await this.connection.promise;
+  }
 
-    return actors.map(this.buildFoundryActorData);
+  stop() {
+    this.dispose();
+  }
+
+  private getActors = async (): Promise<FoundryVTTToCVActor[]> => {
+    return await this.foundryVttApi.getActors();
   };
 
   private createActor = async () => {
-    const newActor = await Actor.create({
-      name: 'Dummy actor (Characters Vault)',
-      type: 'character',
-    });
-
-    if (!newActor) {
-      throw new Error('Error creating actor');
-    }
-
-    return this.buildFoundryActorData(newActor);
+    return await this.foundryVttApi.createActor();
   };
 
   private updateActor = async ({
@@ -67,81 +58,40 @@ export class IframeHandler {
   }: {
     isNew: boolean;
     tokenAsBase64?: string;
-    actor: FoundryVTTActorData;
+    actor: FoundryVTTToCVActor;
     actions: any[];
   }) => {
     let tokenPath: string | undefined;
 
     if (tokenAsBase64) {
-      if (canUpload()) {
-        tokenPath = (await uploadCharacterToken(tokenAsBase64, actor))?.path;
+      if (await this.foundryVttApi.canUpload()) {
+        tokenPath = (await this.foundryVttApi.uploadToken(actor, tokenAsBase64))
+          .path;
       } else {
-        ui.notifications?.warn(
+        this.foundryVttApi.notify(
+          'warn',
           'No tienes permisos para subir los tokens de los personajes. Pídele a tu GM que lo haga por ti.',
         );
       }
     }
 
-    const actors = [...getActorsWithOwnerPermission()];
+    await this.foundryVttApi.updateActor({
+      actorId: actor.id,
+      actorData: actor,
+      isNew,
+      tokenPath,
+    });
 
-    const actorToBeUpdated = actors.find((a) => a.id === actor.id);
+    for (const action of actions) {
+      if (action.type === 'delete' && action.ids.length > 0) {
+        await this.foundryVttApi.deleteItems(actor.id, action.ids);
+      }
 
-    if (actorToBeUpdated) {
-      await actorToBeUpdated.update({
-        img: tokenPath,
-
-        name: actor.name,
-
-        data: actor.data,
-
-        token: {
-          img: tokenPath,
-          name: isNew ? actor.name : actorToBeUpdated.token?.name,
-        },
-
-        flags: {
-          ...actorToBeUpdated.data.flags,
-          ...actor.flags,
-        },
-      });
-
-      for (const action of actions) {
-        if (action.type === 'delete' && action.ids.length > 0) {
-          await actorToBeUpdated.deleteEmbeddedDocuments('Item', action.ids);
-        }
-
-        if (action.type === 'create' && action.data.length > 0) {
-          await actorToBeUpdated.createEmbeddedDocuments(
-            'Item',
-            action.data.map((d: any) => ({
-              type: d.type,
-              name: d.name,
-              data: d.data,
-              flags: d.flags,
-            })),
-          );
-        }
+      if (action.type === 'create' && action.data.length > 0) {
+        await this.foundryVttApi.createItems(actor.id, action.data);
       }
     }
   };
-
-  async start() {
-    await this.connection.promise;
-  }
-
-  stop() {
-    this.dispose();
-  }
-
-  private buildFoundryActorData = (
-    actor: StoredDocument<Actor>,
-  ): FoundryVTTActorData => ({
-    id: actor.id,
-    name: actor.name ?? 'Unknown',
-    vtt: 'foundry',
-    data: actor.data.data,
-    flags: actor.data.flags,
-  });
 
   private dispose() {
     this.connection?.destroy();

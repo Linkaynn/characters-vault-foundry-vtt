@@ -1,8 +1,4 @@
-const defaultDialogOptions = {
-  width: 1250,
-  height: 850,
-  classes: ['characters-vault__iframe'],
-};
+import { buildFoundryVTTApiDependingOnVersion } from '../foundry/implementations/foundry/utils/buildFoundryVTTApiDependingOnVersion';
 
 export const openIframeDialog = ({
   src,
@@ -13,11 +9,11 @@ export const openIframeDialog = ({
   onOpen: () => void;
   onClose: () => void;
 }) => {
-  return new Dialog(
-    {
+  return buildFoundryVTTApiDependingOnVersion()
+    .openDialog({
       title: 'Characters Vault',
       content: `
-  <style type='text/css'>
+  <style type="text/css">
     .characters-vault__iframe > .window-content > .dialog-buttons { display: none }
   </style>
   <div style="height: 100%;">
@@ -40,7 +36,6 @@ export const openIframeDialog = ({
       close: () => {
         onClose();
       },
-    },
-    defaultDialogOptions,
-  ).render(true);
+    })
+    .render(true);
 };

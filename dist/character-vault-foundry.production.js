@@ -389,15 +389,8 @@ const connectToChild = (options) => {
     }
   };
 };
-const getActorsWithOwnerPermission = () => {
-  if (game.actors) {
-    return game.actors.filter((a) => a.permission === 3);
-  }
-  return [];
-};
-const getUser = () => {
-  return game.user;
-};
+class VTTApi {
+}
 const dataURLtoFile = (dataUrl, filename) => {
   var _a;
   const arr = dataUrl.split(",");
@@ -410,51 +403,346 @@ const dataURLtoFile = (dataUrl, filename) => {
   }
   return new File([u8arr], filename, { type: mime });
 };
-const createFolder = async (folderPath) => {
-  const folders = folderPath.split("/");
-  let currentFolder = "";
-  for (const folder of folders) {
-    currentFolder += `${folder}/`;
-    try {
-      await FilePicker.createDirectory("data", currentFolder);
-    } catch (e) {
-      console.log(e);
+class FoundryVTTApi extends VTTApi {
+  async deleteItems(actorId, itemIds) {
+    await this.getActorByIdOrThrow(actorId).deleteEmbeddedDocuments(
+      "Item",
+      itemIds
+    );
+  }
+  async getActors() {
+    if (game.actors) {
+      return game.actors.filter((a) => a.permission === 3).map((a) => this.buildFoundryActorData(a));
+    }
+    return [];
+  }
+  async createActor() {
+    const actor = await Actor.create({
+      name: "Dummy actor (Characters Vault)",
+      type: "character"
+    });
+    if (!actor) {
+      throw new Error("Error creating actor");
+    }
+    return this.buildFoundryActorData(actor);
+  }
+  async uploadToken(actor, tokenAsBase64) {
+    const result = await this.uploadCharacterToken(tokenAsBase64, actor);
+    if (!result) {
+      throw new Error("Error uploading token");
+    }
+    return result;
+  }
+  openDialog(options) {
+    return new Dialog(options, {
+      width: 1250,
+      height: 850,
+      classes: ["characters-vault__iframe"]
+    });
+  }
+  notify(type, message) {
+    var _a, _b, _c;
+    if (type === "warm") {
+      (_a = ui.notifications) == null ? void 0 : _a.warn(message);
+    }
+    if (type === "error") {
+      (_b = ui.notifications) == null ? void 0 : _b.error(message);
+    }
+    if (type === "info") {
+      (_c = ui.notifications) == null ? void 0 : _c.info(message);
     }
   }
-};
-const uploadCharacterToken = async (tokenAsBase64, actor) => {
-  const tokenFolderPath = `characters-vault/${getUser().id}`;
-  const file = dataURLtoFile(tokenAsBase64, `${actor.id}.png`);
-  await createFolder(tokenFolderPath);
-  const uploadResult = await FilePicker.upload("data", tokenFolderPath, file);
-  if (uploadResult) {
-    const r = uploadResult;
-    return { path: r.path };
-  } else {
-    console.log(uploadResult);
-    throw new Error("Error uploading token");
+  async canUpload() {
+    var _a;
+    return !!((_a = game.user) == null ? void 0 : _a.can("FILES_UPLOAD"));
   }
+  async uploadCharacterToken(tokenAsBase64, actor) {
+    const tokenFolderPath = `characters-vault/${this.getUser().id}`;
+    const file = dataURLtoFile(tokenAsBase64, `${actor.id}.png`);
+    await this.createFolder(tokenFolderPath);
+    const uploadResult = await FilePicker.upload("data", tokenFolderPath, file);
+    if (uploadResult) {
+      const r = uploadResult;
+      return { path: r.path };
+    } else {
+      console.log(uploadResult);
+      throw new Error("Error uploading token");
+    }
+  }
+  getUser() {
+    return game.user;
+  }
+  async createFolder(folderPath) {
+    const folders = folderPath.split("/");
+    let currentFolder = "";
+    for (const folder of folders) {
+      currentFolder += `${folder}/`;
+      try {
+        await FilePicker.createDirectory("data", currentFolder);
+      } catch (e) {
+        console.log(e);
+      }
+    }
+  }
+  getActorById(id2) {
+    return game.actors.find((a) => a.id === id2);
+  }
+  getActorByIdOrThrow(id2) {
+    const actor = this.getActorById(id2);
+    if (!actor) {
+      throw new Error("Actor not found");
+    }
+    return actor;
+  }
+}
+class FoundryV9VTTApi extends FoundryVTTApi {
+  async createItems(actorId, items) {
+    await this.getActorByIdOrThrow(actorId).createEmbeddedDocuments(
+      "Item",
+      items.map((d) => ({
+        type: d.type,
+        name: d.name,
+        data: d.data,
+        flags: d.flags
+      }))
+    );
+  }
+  async updateActor({
+    actorId,
+    actorData,
+    tokenPath,
+    isNew
+  }) {
+    var _a;
+    const actorToBeUpdated = this.getActorByIdOrThrow(actorId);
+    const clonedActorData = JSON.parse(JSON.stringify(actorData));
+    this.normalizeItemsToV9(clonedActorData);
+    await actorToBeUpdated.update({
+      img: tokenPath,
+      name: clonedActorData.name,
+      data: clonedActorData.data,
+      token: {
+        img: tokenPath,
+        name: isNew ? clonedActorData.name : (_a = actorToBeUpdated.token) == null ? void 0 : _a.name
+      },
+      flags: {
+        ...actorToBeUpdated.flags,
+        ...clonedActorData.flags
+      }
+    });
+  }
+  buildFoundryActorData(actor) {
+    const cvActor = {
+      id: actor.id,
+      name: actor.name ?? "Unknown",
+      vtt: "foundry",
+      vttVersion: getFoundryVersion(),
+      data: actor.data.data,
+      flags: actor.data.flags
+    };
+    this.normalizeItemsFromV9(cvActor);
+    return cvActor;
+  }
+  normalizeItemsToV9(cvActor) {
+    const assignDataFromSystem = (i) => ({ ...i, data: i.data });
+    cvActor.data.general.advantages = cvActor.data.general.advantages.map(assignDataFromSystem);
+    cvActor.data.general.contacts = cvActor.data.general.contacts.map(assignDataFromSystem);
+    cvActor.data.general.inventory = cvActor.data.general.inventory.map(assignDataFromSystem);
+    cvActor.data.general.disadvantages = cvActor.data.general.disadvantages.map(assignDataFromSystem);
+    cvActor.data.general.elan = cvActor.data.general.elan.map(assignDataFromSystem);
+    cvActor.data.general.languages.others = cvActor.data.general.languages.others.map(assignDataFromSystem);
+    cvActor.data.general.levels = cvActor.data.general.levels.map(assignDataFromSystem);
+    cvActor.data.secondaries.secondarySpecialSkills = cvActor.data.secondaries.secondarySpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatSpecialSkills = cvActor.data.combat.combatSpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatTables = cvActor.data.combat.combatTables.map(assignDataFromSystem);
+    cvActor.data.combat.ammo = cvActor.data.combat.ammo.map(assignDataFromSystem);
+    cvActor.data.combat.weapons = cvActor.data.combat.weapons.map(assignDataFromSystem);
+    cvActor.data.combat.armors = cvActor.data.combat.armors.map(assignDataFromSystem);
+    cvActor.data.mystic.spells = cvActor.data.mystic.spells.map(assignDataFromSystem);
+    cvActor.data.mystic.spellMaintenances = cvActor.data.mystic.spellMaintenances.map(assignDataFromSystem);
+    cvActor.data.mystic.selectedSpells = cvActor.data.mystic.selectedSpells.map(assignDataFromSystem);
+    cvActor.data.mystic.summons = cvActor.data.mystic.summons.map(assignDataFromSystem);
+    cvActor.data.mystic.metamagics = cvActor.data.mystic.metamagics.map(assignDataFromSystem);
+    cvActor.data.domine.kiSkills = cvActor.data.domine.kiSkills.map(assignDataFromSystem);
+    cvActor.data.domine.nemesisSkills = cvActor.data.domine.nemesisSkills.map(assignDataFromSystem);
+    cvActor.data.domine.arsMagnus = cvActor.data.domine.arsMagnus.map(assignDataFromSystem);
+    cvActor.data.domine.martialArts = cvActor.data.domine.martialArts.map(assignDataFromSystem);
+    cvActor.data.domine.creatures = cvActor.data.domine.creatures.map(assignDataFromSystem);
+    cvActor.data.domine.specialSkills = cvActor.data.domine.specialSkills.map(assignDataFromSystem);
+    cvActor.data.domine.techniques = cvActor.data.domine.techniques.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicPowers = cvActor.data.psychic.psychicPowers.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicDisciplines = cvActor.data.psychic.psychicDisciplines.map(assignDataFromSystem);
+    cvActor.data.psychic.mentalPatterns = cvActor.data.psychic.mentalPatterns.map(assignDataFromSystem);
+    cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
+  }
+  normalizeItemsFromV9(cvActor) {
+    const assignDataFromSystem = (i) => ({ ...i, data: i.data });
+    cvActor.data.general.advantages = cvActor.data.general.advantages.map(assignDataFromSystem);
+    cvActor.data.general.contacts = cvActor.data.general.contacts.map(assignDataFromSystem);
+    cvActor.data.general.inventory = cvActor.data.general.inventory.map(assignDataFromSystem);
+    cvActor.data.general.disadvantages = cvActor.data.general.disadvantages.map(assignDataFromSystem);
+    cvActor.data.general.elan = cvActor.data.general.elan.map(assignDataFromSystem);
+    cvActor.data.general.languages.others = cvActor.data.general.languages.others.map(assignDataFromSystem);
+    cvActor.data.general.levels = cvActor.data.general.levels.map(assignDataFromSystem);
+    cvActor.data.secondaries.secondarySpecialSkills = cvActor.data.secondaries.secondarySpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatSpecialSkills = cvActor.data.combat.combatSpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatTables = cvActor.data.combat.combatTables.map(assignDataFromSystem);
+    cvActor.data.combat.ammo = cvActor.data.combat.ammo.map(assignDataFromSystem);
+    cvActor.data.combat.weapons = cvActor.data.combat.weapons.map(assignDataFromSystem);
+    cvActor.data.combat.armors = cvActor.data.combat.armors.map(assignDataFromSystem);
+    cvActor.data.mystic.spells = cvActor.data.mystic.spells.map(assignDataFromSystem);
+    cvActor.data.mystic.spellMaintenances = cvActor.data.mystic.spellMaintenances.map(assignDataFromSystem);
+    cvActor.data.mystic.selectedSpells = cvActor.data.mystic.selectedSpells.map(assignDataFromSystem);
+    cvActor.data.mystic.summons = cvActor.data.mystic.summons.map(assignDataFromSystem);
+    cvActor.data.mystic.metamagics = cvActor.data.mystic.metamagics.map(assignDataFromSystem);
+    cvActor.data.domine.kiSkills = cvActor.data.domine.kiSkills.map(assignDataFromSystem);
+    cvActor.data.domine.nemesisSkills = cvActor.data.domine.nemesisSkills.map(assignDataFromSystem);
+    cvActor.data.domine.arsMagnus = cvActor.data.domine.arsMagnus.map(assignDataFromSystem);
+    cvActor.data.domine.martialArts = cvActor.data.domine.martialArts.map(assignDataFromSystem);
+    cvActor.data.domine.creatures = cvActor.data.domine.creatures.map(assignDataFromSystem);
+    cvActor.data.domine.specialSkills = cvActor.data.domine.specialSkills.map(assignDataFromSystem);
+    cvActor.data.domine.techniques = cvActor.data.domine.techniques.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicPowers = cvActor.data.psychic.psychicPowers.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicDisciplines = cvActor.data.psychic.psychicDisciplines.map(assignDataFromSystem);
+    cvActor.data.psychic.mentalPatterns = cvActor.data.psychic.mentalPatterns.map(assignDataFromSystem);
+    cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
+  }
+}
+class FoundryV10UpVTTApi extends FoundryVTTApi {
+  async createItems(actorId, items) {
+    await this.getActorByIdOrThrow(actorId).createEmbeddedDocuments(
+      "Item",
+      items.map((d) => ({
+        type: d.type,
+        name: d.name,
+        system: d.data,
+        flags: d.flags
+      }))
+    );
+  }
+  async updateActor({
+    actorId,
+    actorData,
+    tokenPath,
+    isNew
+  }) {
+    var _a;
+    const actorToBeUpdated = this.getActorByIdOrThrow(actorId);
+    const clonedActorData = JSON.parse(JSON.stringify(actorData));
+    this.normalizeItemsToV10Up(clonedActorData);
+    await actorToBeUpdated.update({
+      img: tokenPath,
+      name: clonedActorData.name,
+      system: clonedActorData.data,
+      token: {
+        img: tokenPath,
+        name: isNew ? clonedActorData.name : (_a = actorToBeUpdated.token) == null ? void 0 : _a.name
+      },
+      flags: {
+        ...actorToBeUpdated.flags,
+        ...clonedActorData.flags
+      }
+    });
+  }
+  buildFoundryActorData(actor) {
+    const cvActor = {
+      id: actor.id,
+      name: actor.name ?? "Unknown",
+      vtt: "foundry",
+      vttVersion: getFoundryVersion(),
+      data: actor.system,
+      flags: actor.flags
+    };
+    this.normalizeItemsFromV10Up(cvActor);
+    return cvActor;
+  }
+  normalizeItemsToV10Up(cvActor) {
+    const assignDataFromSystem = (i) => ({ ...i, system: i.data });
+    cvActor.data.general.advantages = cvActor.data.general.advantages.map(assignDataFromSystem);
+    cvActor.data.general.contacts = cvActor.data.general.contacts.map(assignDataFromSystem);
+    cvActor.data.general.inventory = cvActor.data.general.inventory.map(assignDataFromSystem);
+    cvActor.data.general.disadvantages = cvActor.data.general.disadvantages.map(assignDataFromSystem);
+    cvActor.data.general.elan = cvActor.data.general.elan.map(assignDataFromSystem);
+    cvActor.data.general.languages.others = cvActor.data.general.languages.others.map(assignDataFromSystem);
+    cvActor.data.general.levels = cvActor.data.general.levels.map(assignDataFromSystem);
+    cvActor.data.secondaries.secondarySpecialSkills = cvActor.data.secondaries.secondarySpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatSpecialSkills = cvActor.data.combat.combatSpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatTables = cvActor.data.combat.combatTables.map(assignDataFromSystem);
+    cvActor.data.combat.ammo = cvActor.data.combat.ammo.map(assignDataFromSystem);
+    cvActor.data.combat.weapons = cvActor.data.combat.weapons.map(assignDataFromSystem);
+    cvActor.data.combat.armors = cvActor.data.combat.armors.map(assignDataFromSystem);
+    cvActor.data.mystic.spells = cvActor.data.mystic.spells.map(assignDataFromSystem);
+    cvActor.data.mystic.spellMaintenances = cvActor.data.mystic.spellMaintenances.map(assignDataFromSystem);
+    cvActor.data.mystic.selectedSpells = cvActor.data.mystic.selectedSpells.map(assignDataFromSystem);
+    cvActor.data.mystic.summons = cvActor.data.mystic.summons.map(assignDataFromSystem);
+    cvActor.data.mystic.metamagics = cvActor.data.mystic.metamagics.map(assignDataFromSystem);
+    cvActor.data.domine.kiSkills = cvActor.data.domine.kiSkills.map(assignDataFromSystem);
+    cvActor.data.domine.nemesisSkills = cvActor.data.domine.nemesisSkills.map(assignDataFromSystem);
+    cvActor.data.domine.arsMagnus = cvActor.data.domine.arsMagnus.map(assignDataFromSystem);
+    cvActor.data.domine.martialArts = cvActor.data.domine.martialArts.map(assignDataFromSystem);
+    cvActor.data.domine.creatures = cvActor.data.domine.creatures.map(assignDataFromSystem);
+    cvActor.data.domine.specialSkills = cvActor.data.domine.specialSkills.map(assignDataFromSystem);
+    cvActor.data.domine.techniques = cvActor.data.domine.techniques.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicPowers = cvActor.data.psychic.psychicPowers.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicDisciplines = cvActor.data.psychic.psychicDisciplines.map(assignDataFromSystem);
+    cvActor.data.psychic.mentalPatterns = cvActor.data.psychic.mentalPatterns.map(assignDataFromSystem);
+    cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
+  }
+  normalizeItemsFromV10Up(cvActor) {
+    const assignDataFromSystem = (i) => ({ ...i, data: i.system });
+    cvActor.data.general.advantages = cvActor.data.general.advantages.map(assignDataFromSystem);
+    cvActor.data.general.contacts = cvActor.data.general.contacts.map(assignDataFromSystem);
+    cvActor.data.general.inventory = cvActor.data.general.inventory.map(assignDataFromSystem);
+    cvActor.data.general.disadvantages = cvActor.data.general.disadvantages.map(assignDataFromSystem);
+    cvActor.data.general.elan = cvActor.data.general.elan.map(assignDataFromSystem);
+    cvActor.data.general.languages.others = cvActor.data.general.languages.others.map(assignDataFromSystem);
+    cvActor.data.general.levels = cvActor.data.general.levels.map(assignDataFromSystem);
+    cvActor.data.secondaries.secondarySpecialSkills = cvActor.data.secondaries.secondarySpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatSpecialSkills = cvActor.data.combat.combatSpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatTables = cvActor.data.combat.combatTables.map(assignDataFromSystem);
+    cvActor.data.combat.ammo = cvActor.data.combat.ammo.map(assignDataFromSystem);
+    cvActor.data.combat.weapons = cvActor.data.combat.weapons.map(assignDataFromSystem);
+    cvActor.data.combat.armors = cvActor.data.combat.armors.map(assignDataFromSystem);
+    cvActor.data.mystic.spells = cvActor.data.mystic.spells.map(assignDataFromSystem);
+    cvActor.data.mystic.spellMaintenances = cvActor.data.mystic.spellMaintenances.map(assignDataFromSystem);
+    cvActor.data.mystic.selectedSpells = cvActor.data.mystic.selectedSpells.map(assignDataFromSystem);
+    cvActor.data.mystic.summons = cvActor.data.mystic.summons.map(assignDataFromSystem);
+    cvActor.data.mystic.metamagics = cvActor.data.mystic.metamagics.map(assignDataFromSystem);
+    cvActor.data.domine.kiSkills = cvActor.data.domine.kiSkills.map(assignDataFromSystem);
+    cvActor.data.domine.nemesisSkills = cvActor.data.domine.nemesisSkills.map(assignDataFromSystem);
+    cvActor.data.domine.arsMagnus = cvActor.data.domine.arsMagnus.map(assignDataFromSystem);
+    cvActor.data.domine.martialArts = cvActor.data.domine.martialArts.map(assignDataFromSystem);
+    cvActor.data.domine.creatures = cvActor.data.domine.creatures.map(assignDataFromSystem);
+    cvActor.data.domine.specialSkills = cvActor.data.domine.specialSkills.map(assignDataFromSystem);
+    cvActor.data.domine.techniques = cvActor.data.domine.techniques.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicPowers = cvActor.data.psychic.psychicPowers.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicDisciplines = cvActor.data.psychic.psychicDisciplines.map(assignDataFromSystem);
+    cvActor.data.psychic.mentalPatterns = cvActor.data.psychic.mentalPatterns.map(assignDataFromSystem);
+    cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
+  }
+}
+const getFoundryVersion = () => {
+  return parseInt(game.version.split(".")[0]);
 };
-const canUpload = () => {
-  var _a;
-  return !!((_a = game.user) == null ? void 0 : _a.can("FILES_UPLOAD"));
+const buildFoundryVTTApiDependingOnVersion = () => {
+  const version = getFoundryVersion();
+  if (version === 9) {
+    return new FoundryV9VTTApi();
+  }
+  if (version === 10 || version === 11) {
+    return new FoundryV10UpVTTApi();
+  }
+  throw new Error(`Foundry version ${version} is not supported`);
 };
 class IframeHandler {
   constructor(iframeId, iframeOrigin2) {
     __publicField(this, "connection");
+    __publicField(this, "foundryVttApi");
     __publicField(this, "getActors", async () => {
-      const actors = [...getActorsWithOwnerPermission()];
-      return actors.map(this.buildFoundryActorData);
+      return await this.foundryVttApi.getActors();
     });
     __publicField(this, "createActor", async () => {
-      const newActor = await Actor.create({
-        name: "Dummy actor (Characters Vault)",
-        type: "character"
-      });
-      if (!newActor) {
-        throw new Error("Error creating actor");
-      }
-      return this.buildFoundryActorData(newActor);
+      return await this.foundryVttApi.createActor();
     });
     __publicField(this, "updateActor", async ({
       actor,
@@ -462,58 +750,32 @@ class IframeHandler {
       actions,
       isNew
     }) => {
-      var _a, _b, _c;
       let tokenPath;
       if (tokenAsBase64) {
-        if (canUpload()) {
-          tokenPath = (_a = await uploadCharacterToken(tokenAsBase64, actor)) == null ? void 0 : _a.path;
+        if (await this.foundryVttApi.canUpload()) {
+          tokenPath = (await this.foundryVttApi.uploadToken(actor, tokenAsBase64)).path;
         } else {
-          (_b = ui.notifications) == null ? void 0 : _b.warn(
+          this.foundryVttApi.notify(
+            "warn",
             "No tienes permisos para subir los tokens de los personajes. Pídele a tu GM que lo haga por ti."
           );
         }
       }
-      const actors = [...getActorsWithOwnerPermission()];
-      const actorToBeUpdated = actors.find((a) => a.id === actor.id);
-      if (actorToBeUpdated) {
-        await actorToBeUpdated.update({
-          img: tokenPath,
-          name: actor.name,
-          data: actor.data,
-          token: {
-            img: tokenPath,
-            name: isNew ? actor.name : (_c = actorToBeUpdated.token) == null ? void 0 : _c.name
-          },
-          flags: {
-            ...actorToBeUpdated.data.flags,
-            ...actor.flags
-          }
-        });
-        for (const action of actions) {
-          if (action.type === "delete" && action.ids.length > 0) {
-            await actorToBeUpdated.deleteEmbeddedDocuments("Item", action.ids);
-          }
-          if (action.type === "create" && action.data.length > 0) {
-            await actorToBeUpdated.createEmbeddedDocuments(
-              "Item",
-              action.data.map((d) => ({
-                type: d.type,
-                name: d.name,
-                data: d.data,
-                flags: d.flags
-              }))
-            );
-          }
+      await this.foundryVttApi.updateActor({
+        actorId: actor.id,
+        actorData: actor,
+        isNew,
+        tokenPath
+      });
+      for (const action of actions) {
+        if (action.type === "delete" && action.ids.length > 0) {
+          await this.foundryVttApi.deleteItems(actor.id, action.ids);
+        }
+        if (action.type === "create" && action.data.length > 0) {
+          await this.foundryVttApi.createItems(actor.id, action.data);
         }
       }
     });
-    __publicField(this, "buildFoundryActorData", (actor) => ({
-      id: actor.id,
-      name: actor.name ?? "Unknown",
-      vtt: "foundry",
-      data: actor.data.data,
-      flags: actor.data.flags
-    }));
     this.iframeId = iframeId;
     this.iframeOrigin = iframeOrigin2;
     const element = document.getElementById(this.iframeId);
@@ -529,6 +791,7 @@ class IframeHandler {
         getActors: this.getActors
       }
     });
+    this.foundryVttApi = buildFoundryVTTApiDependingOnVersion();
   }
   async start() {
     await this.connection.promise;
@@ -541,21 +804,15 @@ class IframeHandler {
     (_a = this.connection) == null ? void 0 : _a.destroy();
   }
 }
-const defaultDialogOptions = {
-  width: 1250,
-  height: 850,
-  classes: ["characters-vault__iframe"]
-};
 const openIframeDialog = ({
   src,
   onOpen,
   onClose
 }) => {
-  return new Dialog(
-    {
-      title: "Characters Vault",
-      content: `
-  <style type='text/css'>
+  return buildFoundryVTTApiDependingOnVersion().openDialog({
+    title: "Characters Vault",
+    content: `
+  <style type="text/css">
     .characters-vault__iframe > .window-content > .dialog-buttons { display: none }
   </style>
   <div style="height: 100%;">
@@ -570,17 +827,15 @@ const openIframeDialog = ({
     </div>
   </div>
 `,
-      buttons: {},
-      default: "accept",
-      render: () => {
-        onOpen();
-      },
-      close: () => {
-        onClose();
-      }
+    buttons: {},
+    default: "accept",
+    render: () => {
+      onOpen();
     },
-    defaultDialogOptions
-  ).render(true);
+    close: () => {
+      onClose();
+    }
+  }).render(true);
 };
 const start = ({
   iframeOrigin: iframeOrigin2,
