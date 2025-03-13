@@ -721,6 +721,123 @@ class FoundryV10UpVTTApi extends FoundryVTTApi {
     cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
   }
 }
+class FoundryV12VTTApi extends FoundryVTTApi {
+  async createItems(actorId, items) {
+    await this.getActorByIdOrThrow(actorId).createEmbeddedDocuments(
+      "Item",
+      items.map((d) => ({
+        type: d.type,
+        name: d.name,
+        system: d.data,
+        flags: d.flags
+      }))
+    );
+  }
+  async updateActor({
+    actorId,
+    actorData,
+    tokenPath,
+    isNew
+  }) {
+    var _a, _b;
+    const actorToBeUpdated = this.getActorByIdOrThrow(actorId);
+    const clonedActorData = JSON.parse(JSON.stringify(actorData));
+    this.normalizeItemsToV12(clonedActorData);
+    await actorToBeUpdated.update({
+      img: tokenPath,
+      name: clonedActorData.name,
+      system: clonedActorData.data,
+      token: {
+        img: tokenPath,
+        name: isNew ? clonedActorData.name : (_a = actorToBeUpdated.token) == null ? void 0 : _a.name
+      },
+      prototypeToken: {
+        img: tokenPath,
+        name: isNew ? clonedActorData.name : (_b = actorToBeUpdated.prototypeToken) == null ? void 0 : _b.name
+      },
+      flags: {
+        ...actorToBeUpdated.flags,
+        ...clonedActorData.flags
+      }
+    });
+  }
+  buildFoundryActorData(actor) {
+    const cvActor = {
+      id: actor.id,
+      name: actor.name ?? "Unknown",
+      vtt: "foundry",
+      vttVersion: getFoundryVersion(),
+      data: actor.system,
+      flags: actor.flags
+    };
+    this.normalizeItemsFromV12(cvActor);
+    return cvActor;
+  }
+  normalizeItemsToV12(cvActor) {
+    const assignDataFromSystem = (i) => ({ ...i, system: i.data });
+    cvActor.data.general.advantages = cvActor.data.general.advantages.map(assignDataFromSystem);
+    cvActor.data.general.contacts = cvActor.data.general.contacts.map(assignDataFromSystem);
+    cvActor.data.general.inventory = cvActor.data.general.inventory.map(assignDataFromSystem);
+    cvActor.data.general.disadvantages = cvActor.data.general.disadvantages.map(assignDataFromSystem);
+    cvActor.data.general.elan = cvActor.data.general.elan.map(assignDataFromSystem);
+    cvActor.data.general.languages.others = cvActor.data.general.languages.others.map(assignDataFromSystem);
+    cvActor.data.general.levels = cvActor.data.general.levels.map(assignDataFromSystem);
+    cvActor.data.secondaries.secondarySpecialSkills = cvActor.data.secondaries.secondarySpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatSpecialSkills = cvActor.data.combat.combatSpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatTables = cvActor.data.combat.combatTables.map(assignDataFromSystem);
+    cvActor.data.combat.ammo = cvActor.data.combat.ammo.map(assignDataFromSystem);
+    cvActor.data.combat.weapons = cvActor.data.combat.weapons.map(assignDataFromSystem);
+    cvActor.data.combat.armors = cvActor.data.combat.armors.map(assignDataFromSystem);
+    cvActor.data.mystic.spells = cvActor.data.mystic.spells.map(assignDataFromSystem);
+    cvActor.data.mystic.spellMaintenances = cvActor.data.mystic.spellMaintenances.map(assignDataFromSystem);
+    cvActor.data.mystic.selectedSpells = cvActor.data.mystic.selectedSpells.map(assignDataFromSystem);
+    cvActor.data.mystic.summons = cvActor.data.mystic.summons.map(assignDataFromSystem);
+    cvActor.data.mystic.metamagics = cvActor.data.mystic.metamagics.map(assignDataFromSystem);
+    cvActor.data.domine.kiSkills = cvActor.data.domine.kiSkills.map(assignDataFromSystem);
+    cvActor.data.domine.nemesisSkills = cvActor.data.domine.nemesisSkills.map(assignDataFromSystem);
+    cvActor.data.domine.arsMagnus = cvActor.data.domine.arsMagnus.map(assignDataFromSystem);
+    cvActor.data.domine.martialArts = cvActor.data.domine.martialArts.map(assignDataFromSystem);
+    cvActor.data.domine.creatures = cvActor.data.domine.creatures.map(assignDataFromSystem);
+    cvActor.data.domine.specialSkills = cvActor.data.domine.specialSkills.map(assignDataFromSystem);
+    cvActor.data.domine.techniques = cvActor.data.domine.techniques.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicPowers = cvActor.data.psychic.psychicPowers.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicDisciplines = cvActor.data.psychic.psychicDisciplines.map(assignDataFromSystem);
+    cvActor.data.psychic.mentalPatterns = cvActor.data.psychic.mentalPatterns.map(assignDataFromSystem);
+    cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
+  }
+  normalizeItemsFromV12(cvActor) {
+    const assignDataFromSystem = (i) => ({ ...i, data: i.system });
+    cvActor.data.general.advantages = cvActor.data.general.advantages.map(assignDataFromSystem);
+    cvActor.data.general.contacts = cvActor.data.general.contacts.map(assignDataFromSystem);
+    cvActor.data.general.inventory = cvActor.data.general.inventory.map(assignDataFromSystem);
+    cvActor.data.general.disadvantages = cvActor.data.general.disadvantages.map(assignDataFromSystem);
+    cvActor.data.general.elan = cvActor.data.general.elan.map(assignDataFromSystem);
+    cvActor.data.general.languages.others = cvActor.data.general.languages.others.map(assignDataFromSystem);
+    cvActor.data.general.levels = cvActor.data.general.levels.map(assignDataFromSystem);
+    cvActor.data.secondaries.secondarySpecialSkills = cvActor.data.secondaries.secondarySpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatSpecialSkills = cvActor.data.combat.combatSpecialSkills.map(assignDataFromSystem);
+    cvActor.data.combat.combatTables = cvActor.data.combat.combatTables.map(assignDataFromSystem);
+    cvActor.data.combat.ammo = cvActor.data.combat.ammo.map(assignDataFromSystem);
+    cvActor.data.combat.weapons = cvActor.data.combat.weapons.map(assignDataFromSystem);
+    cvActor.data.combat.armors = cvActor.data.combat.armors.map(assignDataFromSystem);
+    cvActor.data.mystic.spells = cvActor.data.mystic.spells.map(assignDataFromSystem);
+    cvActor.data.mystic.spellMaintenances = cvActor.data.mystic.spellMaintenances.map(assignDataFromSystem);
+    cvActor.data.mystic.selectedSpells = cvActor.data.mystic.selectedSpells.map(assignDataFromSystem);
+    cvActor.data.mystic.summons = cvActor.data.mystic.summons.map(assignDataFromSystem);
+    cvActor.data.mystic.metamagics = cvActor.data.mystic.metamagics.map(assignDataFromSystem);
+    cvActor.data.domine.kiSkills = cvActor.data.domine.kiSkills.map(assignDataFromSystem);
+    cvActor.data.domine.nemesisSkills = cvActor.data.domine.nemesisSkills.map(assignDataFromSystem);
+    cvActor.data.domine.arsMagnus = cvActor.data.domine.arsMagnus.map(assignDataFromSystem);
+    cvActor.data.domine.martialArts = cvActor.data.domine.martialArts.map(assignDataFromSystem);
+    cvActor.data.domine.creatures = cvActor.data.domine.creatures.map(assignDataFromSystem);
+    cvActor.data.domine.specialSkills = cvActor.data.domine.specialSkills.map(assignDataFromSystem);
+    cvActor.data.domine.techniques = cvActor.data.domine.techniques.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicPowers = cvActor.data.psychic.psychicPowers.map(assignDataFromSystem);
+    cvActor.data.psychic.psychicDisciplines = cvActor.data.psychic.psychicDisciplines.map(assignDataFromSystem);
+    cvActor.data.psychic.mentalPatterns = cvActor.data.psychic.mentalPatterns.map(assignDataFromSystem);
+    cvActor.data.psychic.innatePsychicPowers = cvActor.data.psychic.innatePsychicPowers.map(assignDataFromSystem);
+  }
+}
 const getFoundryVersion = () => {
   return parseInt(game.version.split(".")[0]);
 };
@@ -731,6 +848,9 @@ const buildFoundryVTTApiDependingOnVersion = () => {
   }
   if (version === 10 || version === 11) {
     return new FoundryV10UpVTTApi();
+  }
+  if (version === 12) {
+    return new FoundryV12VTTApi();
   }
   throw new Error(`Foundry version ${version} is not supported`);
 };

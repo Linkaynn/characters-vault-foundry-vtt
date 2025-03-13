@@ -3,11 +3,12 @@ import { buildFoundryVTTApiDependingOnVersion } from '../foundry/implementations
 import { FoundryVTTToCVActor } from '../foundry/implementations/foundry/FoundryVTTToCVActor';
 import { FoundryV10UpVTTApi } from '../foundry/implementations/foundry/FoundryV10UpVTTApi';
 import { FoundryV9VTTApi } from '../foundry/implementations/foundry/FoundryV9VTTApi';
+import { FoundryV12VTTApi } from '../foundry/implementations/foundry/FoundryV12VTTApi';
 
 export class IframeHandler {
   private connection: Connection;
 
-  private foundryVttApi: FoundryV10UpVTTApi | FoundryV9VTTApi;
+  private foundryVttApi: FoundryV10UpVTTApi | FoundryV9VTTApi | FoundryV12VTTApi;
 
   constructor(
     private readonly iframeId: string,
