@@ -849,7 +849,7 @@ const buildFoundryVTTApiDependingOnVersion = () => {
   if (version === 10 || version === 11) {
     return new FoundryV10UpVTTApi();
   }
-  if (version === 12) {
+  if (version === 12 || version === 13) {
     return new FoundryV12VTTApi();
   }
   throw new Error(`Foundry version ${version} is not supported`);

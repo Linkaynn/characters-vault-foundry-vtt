@@ -24,7 +24,7 @@ export const buildFoundryVTTApiDependingOnVersion = ():
     return new FoundryV10UpVTTApi();
   }
 
-  if (version === 12) {
+  if (version === 12 || version === 13) {
     return new FoundryV12VTTApi();
   }
 
