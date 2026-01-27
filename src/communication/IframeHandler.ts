@@ -1,12 +1,25 @@
 import { Connection, connectToChild } from 'penpal';
+import type { AsyncMethodReturns } from 'penpal/lib/types';
 import { buildFoundryVTTApiDependingOnVersion } from '../foundry/implementations/foundry/utils/buildFoundryVTTApiDependingOnVersion';
 import { FoundryVTTToCVActor } from '../foundry/implementations/foundry/FoundryVTTToCVActor';
 import { FoundryV10UpVTTApi } from '../foundry/implementations/foundry/FoundryV10UpVTTApi';
 import { FoundryV9VTTApi } from '../foundry/implementations/foundry/FoundryV9VTTApi';
 import { FoundryV12VTTApi } from '../foundry/implementations/foundry/FoundryV12VTTApi';
+import type {
+  FoundryRollRequest,
+  FoundryRollResult,
+} from '../foundry/implementations/foundry/FoundryVTTApi';
+
+// Methods exposed by Characters Vault (child) that Foundry can call
+type ChildMethods = {
+  getCurrentPath: () => string;
+  navigateToPath: (path: string) => void;
+};
 
 export class IframeHandler {
-  private connection: Connection;
+  private connection: Connection<ChildMethods>;
+
+  private child: AsyncMethodReturns<ChildMethods> | undefined;
 
   private foundryVttApi: FoundryV10UpVTTApi | FoundryV9VTTApi | FoundryV12VTTApi;
 
@@ -20,7 +33,7 @@ export class IframeHandler {
       throw new Error(`Element with id ${this.iframeId} not found`);
     }
 
-    this.connection = connectToChild({
+    this.connection = connectToChild<ChildMethods>({
       iframe: element,
 
       childOrigin: this.iframeOrigin,
@@ -29,6 +42,7 @@ export class IframeHandler {
         createActor: this.createActor,
         updateActor: this.updateActor,
         getActors: this.getActors,
+        executeRoll: this.executeRoll,
       },
     });
 
@@ -36,15 +50,39 @@ export class IframeHandler {
   }
 
   async start() {
-    await this.connection.promise;
+    this.child = await this.connection.promise;
   }
 
   stop() {
     this.dispose();
   }
 
+  async getCurrentPath(): Promise<string> {
+    if (!this.child) return '';
+    try {
+      return await this.child.getCurrentPath();
+    } catch {
+      return '';
+    }
+  }
+
+  async navigateToPath(path: string): Promise<void> {
+    if (!this.child) return;
+    try {
+      await this.child.navigateToPath(path);
+    } catch {
+      // Ignore navigation errors
+    }
+  }
+
   private getActors = async (): Promise<FoundryVTTToCVActor[]> => {
     return await this.foundryVttApi.getActors();
+  };
+
+  private executeRoll = async (
+    request: FoundryRollRequest,
+  ): Promise<FoundryRollResult> => {
+    return await this.foundryVttApi.executeRoll(request);
   };
 
   private createActor = async () => {

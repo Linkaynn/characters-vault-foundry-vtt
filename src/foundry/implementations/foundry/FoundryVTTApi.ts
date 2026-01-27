@@ -2,6 +2,21 @@ import { VTTApi } from '../../VTTApi';
 import { dataURLtoFile } from '../../../utils/transformBase64DataUrlToFile';
 import { FoundryVTTToCVActor } from './FoundryVTTToCVActor';
 
+export type FoundryRollRequest = {
+  label: string;
+  diceType: 'd100' | 'd10' | 'd100-no-explode';
+  modifier: number;
+  canPifia: boolean;
+  pifiaContext?: { modifier: number; hasGoodLuck: boolean; hasBadLuck: boolean };
+  isGmOnly: boolean;
+  characterName?: string;
+};
+
+export type FoundryRollResult = {
+  success: boolean;
+  error?: string;
+};
+
 type BaseActor = {
   id: string;
   name: string;
@@ -69,6 +84,27 @@ declare const game: {
     id: string;
     isGM: boolean;
     can: (permission: string) => boolean;
+  };
+};
+
+declare const Roll: {
+  new (formula: string): {
+    evaluate: (options?: { async: boolean }) => Promise<{
+      total: number;
+      toMessage: (
+        data?: { flavor?: string; speaker?: { alias?: string } },
+        options?: { rollMode?: string },
+      ) => Promise<void>;
+    }>;
+  };
+};
+
+declare const CONST: {
+  DICE_ROLL_MODES: {
+    PUBLIC: string;
+    PRIVATE: string;
+    BLIND: string;
+    SELF: string;
   };
 };
 
@@ -161,6 +197,66 @@ export abstract class FoundryVTTApi<T extends BaseActor> extends VTTApi<
     }
   }
 
+  async executeRoll(request: FoundryRollRequest): Promise<FoundryRollResult> {
+    try {
+      // Build formula based on dice type
+      // 'd100' = exploding dice (1d100xa in Foundry)
+      // 'd100-no-explode' = non-exploding (1d100)
+      // 'd10' = 1d10
+      let formula: string;
+      switch (request.diceType) {
+        case 'd100':
+          formula = '1d100xa';
+          break;
+        case 'd100-no-explode':
+          formula = '1d100';
+          break;
+        case 'd10':
+          formula = '1d10';
+          break;
+        default:
+          formula = '1d100';
+      }
+
+      // Add modifier to formula
+      if (request.modifier !== 0) {
+        const sign = request.modifier > 0 ? '+' : '';
+        formula = `${formula}${sign}${request.modifier}`;
+      }
+
+      // Create and evaluate the roll
+      const roll = new Roll(formula);
+      const result = await roll.evaluate({ async: true });
+
+      // Build speaker info
+      const speaker = request.characterName
+        ? { alias: request.characterName }
+        : undefined;
+
+      // Determine roll mode based on isGmOnly
+      const rollMode = request.isGmOnly
+        ? CONST.DICE_ROLL_MODES.BLIND
+        : CONST.DICE_ROLL_MODES.PUBLIC;
+
+      // Send roll to chat
+      await result.toMessage(
+        {
+          flavor: request.label,
+          speaker,
+        },
+        { rollMode },
+      );
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error executing roll in Foundry:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
   async canUpload(): Promise<boolean> {
     return !!game.user?.can('FILES_UPLOAD');
   }
@@ -181,8 +277,6 @@ export abstract class FoundryVTTApi<T extends BaseActor> extends VTTApi<
 
       return { path: r.path };
     } else {
-      console.log(uploadResult);
-
       throw new Error('Error uploading token');
     }
   }

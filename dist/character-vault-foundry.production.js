@@ -452,6 +452,46 @@ class FoundryVTTApi extends VTTApi {
       (_c = ui.notifications) == null ? void 0 : _c.info(message);
     }
   }
+  async executeRoll(request) {
+    try {
+      let formula;
+      switch (request.diceType) {
+        case "d100":
+          formula = "1d100xa";
+          break;
+        case "d100-no-explode":
+          formula = "1d100";
+          break;
+        case "d10":
+          formula = "1d10";
+          break;
+        default:
+          formula = "1d100";
+      }
+      if (request.modifier !== 0) {
+        const sign = request.modifier > 0 ? "+" : "";
+        formula = `${formula}${sign}${request.modifier}`;
+      }
+      const roll = new Roll(formula);
+      const result = await roll.evaluate({ async: true });
+      const speaker = request.characterName ? { alias: request.characterName } : void 0;
+      const rollMode = request.isGmOnly ? CONST.DICE_ROLL_MODES.BLIND : CONST.DICE_ROLL_MODES.PUBLIC;
+      await result.toMessage(
+        {
+          flavor: request.label,
+          speaker
+        },
+        { rollMode }
+      );
+      return { success: true };
+    } catch (error) {
+      console.error("Error executing roll in Foundry:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  }
   async canUpload() {
     var _a;
     return !!((_a = game.user) == null ? void 0 : _a.can("FILES_UPLOAD"));
@@ -465,7 +505,6 @@ class FoundryVTTApi extends VTTApi {
       const r = uploadResult;
       return { path: r.path };
     } else {
-      console.log(uploadResult);
       throw new Error("Error uploading token");
     }
   }
@@ -857,9 +896,13 @@ const buildFoundryVTTApiDependingOnVersion = () => {
 class IframeHandler {
   constructor(iframeId, iframeOrigin2) {
     __publicField(this, "connection");
+    __publicField(this, "child");
     __publicField(this, "foundryVttApi");
     __publicField(this, "getActors", async () => {
       return await this.foundryVttApi.getActors();
+    });
+    __publicField(this, "executeRoll", async (request) => {
+      return await this.foundryVttApi.executeRoll(request);
     });
     __publicField(this, "createActor", async () => {
       return await this.foundryVttApi.createActor();
@@ -908,16 +951,34 @@ class IframeHandler {
       methods: {
         createActor: this.createActor,
         updateActor: this.updateActor,
-        getActors: this.getActors
+        getActors: this.getActors,
+        executeRoll: this.executeRoll
       }
     });
     this.foundryVttApi = buildFoundryVTTApiDependingOnVersion();
   }
   async start() {
-    await this.connection.promise;
+    this.child = await this.connection.promise;
   }
   stop() {
     this.dispose();
+  }
+  async getCurrentPath() {
+    if (!this.child)
+      return "";
+    try {
+      return await this.child.getCurrentPath();
+    } catch {
+      return "";
+    }
+  }
+  async navigateToPath(path) {
+    if (!this.child)
+      return;
+    try {
+      await this.child.navigateToPath(path);
+    } catch {
+    }
   }
   dispose() {
     var _a;
@@ -957,6 +1018,20 @@ const openIframeDialog = ({
     }
   }).render(true);
 };
+const LAST_PATH_STORAGE_KEY = "characters-vault-last-path";
+const getLastPath = () => {
+  try {
+    return localStorage.getItem(LAST_PATH_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+};
+const saveLastPath = (path) => {
+  try {
+    localStorage.setItem(LAST_PATH_STORAGE_KEY, path);
+  } catch {
+  }
+};
 const start = ({
   iframeOrigin: iframeOrigin2,
   iframeSrc: iframeSrc2
@@ -966,10 +1041,21 @@ const start = ({
     src: iframeSrc2,
     onOpen: () => {
       handler = new IframeHandler("characters-vault-iframe", iframeOrigin2);
-      handler.start();
+      handler.start().then(() => {
+        const lastPath = getLastPath();
+        if (lastPath) {
+          handler.navigateToPath(lastPath);
+        }
+      });
     },
-    onClose: () => {
-      handler == null ? void 0 : handler.stop();
+    onClose: async () => {
+      if (handler) {
+        const currentPath = await handler.getCurrentPath();
+        if (currentPath) {
+          saveLastPath(currentPath);
+        }
+        handler.stop();
+      }
     }
   });
 };
